@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>لعبة الحساب</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--tx:#1d2540;--ac:#2f6fed;--ok:#1e9e5a;--bd:#d5dbea;--op:#ff9f1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a2b;--card:#1e2640;--tx:#eef1fa;--bd:#38426a}}
+:root[data-theme="dark"]{--bg:#141a2b;--card:#1e2640;--tx:#eef1fa;--bd:#38426a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:Tahoma,Arial,sans-serif;text-align:center;padding:16px}
+h1{margin:6px 0 12px}
+.target{display:inline-block;background:var(--ac);color:#fff;font-size:44px;font-weight:bold;padding:6px 40px;border-radius:16px}
+.info{margin:10px 0;min-height:24px;font-size:17px}
+.row{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:12px 0}
+button{font:inherit;cursor:pointer;border:2px solid var(--bd);background:var(--card);color:var(--tx);border-radius:14px}
+.num{width:84px;height:70px;font-size:28px;font-weight:bold}
+.num.sel{border-color:var(--ac);background:var(--ac);color:#fff}
+.num.hit{border-color:var(--ok);background:var(--ok);color:#fff}
+.op{width:62px;height:56px;font-size:28px}
+.op.sel{background:var(--op);color:#fff;border-color:var(--op)}
+.act{padding:10px 18px;font-size:16px}
+.act.main{background:var(--ac);color:#fff;border-color:var(--ac)}
+#log{max-width:420px;margin:10px auto;text-align:right;direction:ltr;font-size:17px;line-height:1.9}
+#log div{background:var(--card);border-radius:8px;padding:2px 12px;margin:3px 0;text-align:center}
+#sol{max-width:420px;margin:8px auto;direction:ltr;color:var(--ok);font-weight:bold}
+</style>
+</head>
+<body>
+<h1>🧮 لعبة الحساب</h1>
+<div>العدد المطلوب</div>
+<div class="target" id="target">0</div>
+<div class="info" id="info"></div>
+<div class="row" id="nums"></div>
+<div class="row" id="ops"></div>
+<div class="row">
+<button class="act" onclick="undo()">↩️ تراجع</button>
+<button class="act" onclick="restart()">🔁 إعادة</button>
+<button class="act" onclick="solve()">💡 الحل</button>
+<button class="act main" onclick="newGame()">لعبة جديدة</button>
+</div>
+<div id="log"></div>
+<div id="sol"></div>
+<script>
+const POOL=[1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,25,50,75,100];
+let start=[],target=0,items=[],hist=[],sel=null,op=null,logs=[],won=false;
+const $=id=>document.getElementById(id);
+function newGame(){
+  const p=POOL.slice().sort(()=>Math.random()-.5);
+  start=p.slice(0,6);
+  // build reachable target
+  let t=0,tries=0;
+  while(tries++<200){
+    let l=start.map(v=>v);
+    const n=2+Math.floor(Math.random()*4);
+    for(let k=0;k<n&&l.length>1;k++){
+      const i=Math.floor(Math.random()*l.length);let j;
+      do{j=Math.floor(Math.random()*l.length)}while(j==i);
+      const a=l[i],b=l[j],o=Math.floor(Math.random()*3);
+      let r=o==0?a+b:o==1?a-b:a*b;
+      if(r<=0)continue;
+      l=l.filter((_,x)=>x!=i&&x!=j);l.push(r);
+    }
+    const c=l[l.length-1];
+    if(c>=100&&c<=999){t=c;break}
+  }
+  target=t||(100+Math.floor(Math.random()*900));
+  $('target').textContent=target;
+  restart();
+}
+function restart(){
+  items=start.map(v=>({v:v}));hist=[];logs=[];sel=null;op=null;won=false;
+  $('sol').textContent='';$('info').textContent='اختر عددًا ثم عملية ثم عددًا آخر';
+  draw();
+}
+function draw(){
+  $('nums').innerHTML='';
+  items.forEach((it,i)=>{
+    const b=document.createElement('button');
+    b.className='num'+(sel===i?' sel':'')+(it.v==target?' hit':'');
+    b.textContent=it.v;b.onclick=()=>pick(i);$('nums').appendChild(b);
+  });
+  $('ops').innerHTML='';
+  ['+','−','×','÷'].forEach(s=>{
+    const b=document.createElement('button');
+    b.className='op'+(op===s?' sel':'');b.textContent=s;
+    b.onclick=()=>{if(sel!==null){op=op===s?null:s;draw()}};
+    $('ops').appendChild(b);
+  });
+  $('log').innerHTML=logs.map(l=>'<div>'+l+'</div>').join('');
+}
+function pick(i){
+  if(won)return;
+  if(sel===null){sel=i;draw();return}
+  if(sel===i){sel=null;op=null;draw();return}
+  if(!op){sel=i;draw();return}
+  const a=items[sel].v,b=items[i].v;let r;
+  if(op=='+')r=a+b;
+  else if(op=='−'){r=a-b;if(r<=0){msg('⚠️ الناتج يجب أن يكون موجبًا');return}}
+  else if(op=='×')r=a*b;
+  else{if(b==0||a%b!=0){msg('⚠️ القسمة غير تامة');return}r=a/b}
+  hist.push({items:items.map(x=>({...x})),logs:logs.slice()});
+  logs.push(a+' '+op+' '+b+' = '+r);
+  items=items.filter((_,x)=>x!=sel&&x!=i);items.push({v:r});
+  sel=null;op=null;
+  if(r==target){won=true;msg('🎉 أحسنت! وصلت إلى العدد المطلوب')}
+  else msg('اختر العملية التالية');
+  draw();
+}
+function msg(t){$('info').textContent=t}
+function undo(){
+  if(!hist.length)return;
+  const h=hist.pop();items=h.items;logs=h.logs;sel=null;op=null;won=false;msg('تم التراجع');draw();
+}
+function solve(){
+  let best=null,bd=1e9;
+  function rec(l){
+    for(const x of l){const d=Math.abs(x.v-target);if(d<bd){bd=d;best=x.e}}
+    if(bd==0||l.length<2)return;
+    for(let i=0;i<l.length&&bd;i++)for(let j=i+1;j<l.length&&bd;j++){
+      const A=l[i],B=l[j],rest=l.filter((_,x)=>x!=i&&x!=j);
+      const c=[[A.v+B.v,'('+A.e+'+'+B.e+')']];
+      if(A.v*B.v!=A.v+B.v||1)c.push([A.v*B.v,'('+A.e+'×'+B.e+')']);
+      if(A.v>B.v)c.push([A.v-B.v,'('+A.e+'−'+B.e+')']);
+      if(B.v>A.v)c.push([B.v-A.v,'('+B.e+'−'+A.e+')']);
+      if(B.v&&A.v%B.v==0)c.push([A.v/B.v,'('+A.e+'÷'+B.e+')']);
+      if(A.v&&B.v%A.v==0)c.push([B.v/A.v,'('+B.e+'÷'+A.e+')']);
+      for(const [v,e] of c){rec(rest.concat([{v:v,e:e}]));if(!bd)return}
+    }
+  }
+  rec(start.map(v=>({v:v,e:String(v)})));
+  $('sol').textContent=(bd?'أقرب نتيجة (فرق '+bd+'): ':'')+best.replace(/^\((.*)\)$/,'$1')+(bd?'':' = '+target);
+}
+newGame();
+</script>
+</body>
+</html>
